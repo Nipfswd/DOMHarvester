@@ -1,74 +1,90 @@
-import JSZip from "jszip";
-import cheerio from "cheerio";
+// api/scrape.js
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Only POST requests allowed" });
-    return;
-  }
+const express = require("express");
+const axios = require("axios");
+const JSZip = require("jszip");
+const { JSDOM } = require("jsdom");
 
+const app = express();
+app.use(express.json({ limit: "10mb" }));
+
+app.post("/api/scrape", async (req, res) => {
   const { url } = req.body;
-  if (!url || typeof url !== "string") {
-    res.status(400).json({ error: "Missing or invalid url" });
-    return;
+
+  if (!url) {
+    return res.status(400).json({ error: "Missing URL in request body" });
   }
 
   try {
-    // Fetch HTML page
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to fetch page: ${response.status}`);
+    // Fetch the page content
+    const response = await axios.get(url);
+    const html = response.data;
 
-    const html = await response.text();
+    // Parse HTML with JSDOM
+    const dom = new JSDOM(html, { url });
+    const document = dom.window.document;
 
-    // Parse HTML
-    const $ = cheerio.load(html);
-
-    // Collect resource URLs (images and css)
-    const resourceUrls = [];
-
-    $("img[src]").each((_, el) => {
-      let src = $(el).attr("src");
-      if (src && !src.startsWith("data:")) {
-        resourceUrls.push(new URL(src, url).href);
-      }
-    });
-
-    $("link[rel='stylesheet'][href]").each((_, el) => {
-      let href = $(el).attr("href");
-      if (href) {
-        resourceUrls.push(new URL(href, url).href);
-      }
-    });
-
-    // Create zip and add HTML file
+    // Example: extract all images and scripts src/hrefs + HTML content
     const zip = new JSZip();
+
+    // Add full HTML as index.html
     zip.file("index.html", html);
 
-    // Fetch and add resources
-    for (const resourceUrl of resourceUrls) {
+    // Save all images
+    const imgTags = [...document.querySelectorAll("img[src]")];
+    for (const img of imgTags) {
       try {
-        const resResource = await fetch(resourceUrl);
-        if (!resResource.ok) continue;
-
-        const buffer = await resResource.arrayBuffer();
-        // Use last part of URL as filename
-        const fileName = resourceUrl.split("/").pop().split("?")[0] || "file";
-
-        zip.file(fileName, Buffer.from(buffer));
+        const src = img.src;
+        const imgRes = await axios.get(src, { responseType: "arraybuffer" });
+        // Use filename from URL or fallback
+        const urlObj = new URL(src);
+        const pathname = urlObj.pathname;
+        const filename = pathname.substring(pathname.lastIndexOf("/") + 1) || "image";
+        zip.file("images/" + filename, imgRes.data);
       } catch (e) {
-        // Ignore resource fetch errors
-        console.warn(`Failed to fetch resource: ${resourceUrl}`, e.message);
+        // skip image errors
       }
     }
 
-    // Generate zip file as buffer
+    // Save all scripts
+    const scriptTags = [...document.querySelectorAll("script[src]")];
+    for (const script of scriptTags) {
+      try {
+        const src = script.src;
+        const scriptRes = await axios.get(src);
+        const urlObj = new URL(src);
+        const pathname = urlObj.pathname;
+        const filename = pathname.substring(pathname.lastIndexOf("/") + 1) || "script.js";
+        zip.file("scripts/" + filename, scriptRes.data);
+      } catch (e) {
+        // skip script errors
+      }
+    }
+
+    // Generate zip buffer
     const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
 
-    // Set headers for file download
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="scraped_site.zip"`);
-    res.status(200).send(zipBuffer);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Set headers to serve zip file
+    res.set({
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="scraped.zip"`,
+      "Content-Length": zipBuffer.length,
+    });
+
+    return res.send(zipBuffer);
+  } catch (err) {
+    console.error("Scrape error:", err);
+    return res.status(500).json({ error: "Failed to scrape URL: " + err.message });
   }
+});
+
+// Export app if needed, or start server
+// For example:
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Scrape API listening on http://localhost:${PORT}`);
+  });
 }
+
+module.exports = app;
