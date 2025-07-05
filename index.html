@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scraper</title>
+</head>
+<body>
+  <h1>Scrape & Download ZIP</h1>
+  <input id="url-input" type="text" placeholder="Enter URL to scrape" size="50" />
+  <button id="scrape-btn">Scrape & Download ZIP</button>
+  <p id="status"></p>
+
+  <script>
+    const btn = document.getElementById("scrape-btn");
+    const input = document.getElementById("url-input");
+    const status = document.getElementById("status");
+
+    btn.onclick = async () => {
+      const url = input.value.trim();
+      if (!url) {
+        alert("Enter a URL");
+        return;
+      }
+      status.textContent = "Scraping...";
+
+      try {
+        const res = await fetch("/api/scrape", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          status.textContent = "Error: " + (err.error || res.statusText);
+          return;
+        }
+
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "scraped_site.zip";
+        a.click();
+
+        status.textContent = "Download started!";
+      } catch (e) {
+        status.textContent = "Error: " + e.message;
+      }
+    };
+  </script>
+</body>
+</html>
