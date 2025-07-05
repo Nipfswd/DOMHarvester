@@ -2,39 +2,144 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Scraper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web Scraper & ZIP Downloader</title>
+  <style>
+    /* Reset */
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #f5f7fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      background: white;
+      max-width: 480px;
+      width: 90vw;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 1rem;
+      color: #333;
+      font-weight: 700;
+      font-size: 1.8rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 15px;
+      font-size: 1rem;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      transition: border-color 0.3s ease;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: #4f46e5; /* Indigo */
+      box-shadow: 0 0 6px rgba(79, 70, 229, 0.4);
+    }
+
+    button {
+      margin-top: 1rem;
+      background: #4f46e5;
+      border: none;
+      color: white;
+      font-size: 1.1rem;
+      padding: 12px 25px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      width: 100%;
+    }
+    button:hover:not(:disabled) {
+      background: #4338ca;
+    }
+    button:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      color: #555;
+      min-height: 1.2em;
+      font-weight: 600;
+    }
+
+    /* Spinner */
+    .spinner {
+      margin: 0 auto;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #ddd;
+      border-top: 3px solid #4f46e5;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <h1>Scrape & Download ZIP</h1>
-  <input id="url-input" type="text" placeholder="Enter URL to scrape" size="50" />
-  <button id="scrape-btn">Scrape & Download ZIP</button>
-  <p id="status"></p>
+  <div class="container">
+    <h1>Web Scraper & ZIP Downloader</h1>
+    <input id="url-input" type="text" placeholder="Enter URL to scrape e.g. https://example.com" autocomplete="off" />
+    <button id="scrape-btn">Scrape & Download ZIP</button>
+    <p id="status"></p>
+  </div>
 
   <script>
     const btn = document.getElementById("scrape-btn");
     const input = document.getElementById("url-input");
     const status = document.getElementById("status");
 
+    function setLoading(loading) {
+      if (loading) {
+        btn.disabled = true;
+        status.innerHTML = '<span class="spinner"></span> Scraping...';
+      } else {
+        btn.disabled = false;
+      }
+    }
+
     btn.onclick = async () => {
       const url = input.value.trim();
       if (!url) {
-        alert("Enter a URL");
+        alert("Please enter a URL to scrape.");
         return;
       }
-      status.textContent = "Scraping...";
+      setLoading(true);
+      status.textContent = "";
 
       try {
         const res = await fetch("/api/scrape", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
         });
 
         if (!res.ok) {
           const err = await res.json();
           status.textContent = "Error: " + (err.error || res.statusText);
+          setLoading(false);
           return;
         }
 
@@ -42,11 +147,15 @@
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "scraped_site.zip";
+        document.body.appendChild(a);
         a.click();
+        a.remove();
 
-        status.textContent = "Download started!";
+        status.textContent = "Download started! 🎉";
       } catch (e) {
         status.textContent = "Error: " + e.message;
+      } finally {
+        setLoading(false);
       }
     };
   </script>
